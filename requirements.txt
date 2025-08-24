@@ -1,0 +1,35 @@
+# PPO Training Environment Requirements - Enhanced for State-of-the-Art Performance
+pandas>=2.0.0
+numpy>=1.20.0
+scikit-learn>=1.5.0
+statsmodels>=0.14.0
+torch>=2.0.0
+gymnasium>=0.29.0
+pyyaml>=6.0.0
+
+# Advanced ML and RL Libraries
+transformers>=4.30.0          # Transformer architecture for policy networks
+stable-baselines3>=2.0.0      # Latest RL library with optimizations
+sb3-contrib>=2.0.0           # MaskablePPO and advanced algorithms
+
+# Distributed Training and Optimization
+ray[tune]>=2.0.0             # Distributed training and hyperparameter optimization
+optuna>=3.0.0                # Advanced hyperparameter tuning
+
+# Monitoring and Experiment Tracking
+wandb>=0.15.0                # Weights & Biases for experiment tracking
+tensorboard>=2.13.0          # TensorBoard for monitoring
+
+# Performance Optimization
+numba>=0.57.0                # JIT compilation for performance
+cupy>=12.0.0                 # GPU-accelerated NumPy (requires CUDA)
+
+# Additional Analysis Tools
+matplotlib>=3.7.0            # Plotting and visualization
+seaborn>=0.12.0              # Statistical visualization
+plotly>=5.15.0               # Interactive plots
+
+# Optional for data fetching/analysis
+# polygon-api-client>=1.12.0
+# yfinance>=0.2.0            # Alternative data source
+# tensorboard>=2.10.0
