@@ -50,7 +50,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class DeviceManager:
+class PerformanceDeviceManager:
     """
     Manages device allocation and optimization for training.
     """
@@ -477,7 +477,7 @@ class OptimizedTrainingLoop:
     def __init__(self,
                  model: nn.Module,
                  optimizer: torch.optim.Optimizer,
-                 device_manager: DeviceManager,
+                 device_manager: PerformanceDeviceManager,
                  mixed_precision: bool = True,
                  accumulation_steps: int = 4,
                  max_grad_norm: float = 1.0,
@@ -589,7 +589,7 @@ def create_optimized_trainer(model: nn.Module,
         Configured OptimizedTrainingLoop
     """
     # Initialize device manager
-    device_manager = DeviceManager()
+    device_manager = PerformanceDeviceManager()
     
     # Move model to optimal device
     model = model.to(device_manager.device)

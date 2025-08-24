@@ -42,7 +42,7 @@ class TradingCosts:
 
 
 @dataclass
-class MarketConditions:
+class BacktestMarketConditions:
     """Market condition parameters."""
     volatility_regime: str = "normal"    # low, normal, high, crisis
     liquidity_regime: str = "normal"     # low, normal, high
@@ -257,7 +257,7 @@ class TransactionCostModel:
     def calculate_total_cost(self, 
                            trade_value: float,
                            order_size_ratio: float,
-                           market_conditions: MarketConditions) -> Dict[str, float]:
+                           market_conditions: BacktestMarketConditions) -> Dict[str, float]:
         """
         Calculate total transaction costs.
         
@@ -413,7 +413,7 @@ class AdvancedBacktester:
     def _assess_market_conditions(self, 
                                 price_data: pd.DataFrame,
                                 date: pd.Timestamp,
-                                regime: int) -> MarketConditions:
+                                regime: int) -> BacktestMarketConditions:
         """Assess current market conditions."""
         # Get recent data for analysis
         end_idx = price_data.index.get_loc(date)
@@ -458,7 +458,7 @@ class AdvancedBacktester:
         else:
             liquidity_regime = "normal"
         
-        return MarketConditions(
+        return BacktestMarketConditions(
             volatility_regime=vol_regime,
             liquidity_regime=liquidity_regime,
             trend_regime=trend_regime,
@@ -471,7 +471,7 @@ class AdvancedBacktester:
                       portfolio_value: float,
                       current_position: float,
                       current_cash: float,
-                      market_conditions: MarketConditions,
+                      market_conditions: BacktestMarketConditions,
                       date: pd.Timestamp) -> Optional[Dict[str, Any]]:
         """Execute trade with realistic costs and slippage."""
         

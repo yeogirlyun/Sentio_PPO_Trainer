@@ -46,7 +46,7 @@ class RiskMetrics:
 
 
 @dataclass
-class RiskConstraints:
+class PPORiskConstraints:
     """Risk constraint configuration for trading."""
     max_var_95: float = 0.05        # Maximum 5% VaR
     max_cvar_95: float = 0.08       # Maximum 8% CVaR
@@ -308,7 +308,7 @@ class RiskAwarePPO:
     """
     
     def __init__(self,
-                 risk_constraints: Optional[RiskConstraints] = None,
+                 risk_constraints: Optional[PPORiskConstraints] = None,
                  cvar_alpha: float = 0.05,
                  kelly_lookback: int = 100,
                  risk_lookback: int = 252,
@@ -325,7 +325,7 @@ class RiskAwarePPO:
             risk_adjustment_factor: Factor for risk penalty in rewards
             enable_dynamic_sizing: Enable dynamic position sizing
         """
-        self.risk_constraints = risk_constraints or RiskConstraints()
+        self.risk_constraints = risk_constraints or PPORiskConstraints()
         self.cvar_alpha = cvar_alpha
         self.risk_adjustment_factor = risk_adjustment_factor
         self.enable_dynamic_sizing = enable_dynamic_sizing

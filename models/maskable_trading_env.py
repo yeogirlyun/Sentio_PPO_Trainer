@@ -126,8 +126,8 @@ class MaskableTradingEnv(gym.Env):
         
         # Check if action is masked (invalid)
         if not action_mask[action]:
-            # Penalty for invalid action
-            reward = -0.01  # Small penalty
+            # Small penalty for invalid action (0.01% not 1%)
+            reward = -0.0001  # Much smaller penalty
             info['invalid_action'] = True
             logger.warning(f"Invalid action {action} attempted at step {self.current_step}")
         else:
@@ -208,11 +208,16 @@ class MaskableTradingEnv(gym.Env):
         trade_info = {'trade_executed': False, 'trade_type': None, 'trade_amount': 0}
         
         if action == 0:  # HOLD
-            # Calculate holding reward (small positive for maintaining position)
-            reward = 0.0001 if self.position > 0 else 0.0
+            # Calculate holding reward based on portfolio value change
+            if self.current_step > 0 and len(self.portfolio_history) > 0:
+                prev_portfolio = self.portfolio_history[-1]
+                current_portfolio = self.cash + (self.position * current_price)
+                reward = (current_portfolio - prev_portfolio) / prev_portfolio if prev_portfolio > 0 else 0.0
+            else:
+                reward = 0.0
             
         elif action == 1:  # BUY
-            # Calculate how many shares we can buy
+            # Calculate how many shares we can buy (all-or-nothing for QQQ)
             available_cash = self.cash
             cost_per_share = current_price * (1 + self.transaction_cost)
             shares_to_buy = min(
@@ -221,14 +226,20 @@ class MaskableTradingEnv(gym.Env):
             )
             
             if shares_to_buy > 0:
+                # Store portfolio value before trade
+                portfolio_before = self.cash + (self.position * current_price)
+                
                 # Execute buy order
                 total_cost = shares_to_buy * cost_per_share
                 self.cash -= total_cost
                 self.position += shares_to_buy
                 self.total_trades += 1
                 
-                # Reward for successful trade execution
-                reward = 0.001  # Small positive reward for taking action
+                # Calculate portfolio value after trade (using current price)
+                portfolio_after = self.cash + (self.position * current_price)
+                
+                # Reward based on actual portfolio change
+                reward = (portfolio_after - portfolio_before) / portfolio_before
                 
                 trade_info.update({
                     'trade_executed': True,
@@ -247,29 +258,30 @@ class MaskableTradingEnv(gym.Env):
                 })
         
         elif action == 2:  # SELL
-            # Calculate how many shares we can sell
+            # Sell all position (all-or-nothing for QQQ)
             shares_to_sell = min(self.position, abs(self.max_position))
             
             if shares_to_sell > 0:
+                # Store portfolio value before trade
+                portfolio_before = self.cash + (self.position * current_price)
+                
                 # Execute sell order
                 revenue_per_share = current_price * (1 - self.transaction_cost)
                 total_revenue = shares_to_sell * revenue_per_share
                 
-                # Calculate profit/loss for this trade
-                if len(self.trade_history) > 0:
-                    # Find matching buy orders for P&L calculation
-                    avg_buy_price = self._calculate_average_buy_price()
-                    pnl = (current_price - avg_buy_price) * shares_to_sell
-                    
-                    # Reward based on profitability
-                    reward = pnl / self.initial_capital  # Normalize by initial capital
-                    
-                    if pnl > 0:
-                        self.winning_trades += 1
-                
                 self.cash += total_revenue
                 self.position -= shares_to_sell
                 self.total_trades += 1
+                
+                # Calculate portfolio value after trade (using current price)
+                portfolio_after = self.cash + (self.position * current_price)
+                
+                # Reward based on actual portfolio change
+                reward = (portfolio_after - portfolio_before) / portfolio_before
+                
+                # Track winning trades
+                if reward > 0:
+                    self.winning_trades += 1
                 
                 trade_info.update({
                     'trade_executed': True,

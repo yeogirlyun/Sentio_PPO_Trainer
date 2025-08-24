@@ -38,7 +38,7 @@ from models.transformer_policy import TransformerPolicyNetwork, ScheduledDropout
 from models.dynamic_action_masker import DynamicActionMasker, RiskConstraints, MarketRegime
 from models.risk_aware_ppo import RiskAwarePPO, KellyCriterion, RiskCalculator
 from models.performance_optimization import (
-    DeviceManager, MixedPrecisionTrainer, GradientAccumulator, 
+    PerformanceDeviceManager, MixedPrecisionTrainer, GradientAccumulator, 
     MemoryOptimizer, OptimizedTrainingLoop, create_optimized_trainer
 )
 from models.advanced_backtester import AdvancedBacktester, BacktestConfig, TradingCosts
@@ -175,7 +175,7 @@ class EnhancedUnifiedTrainer:
         self.training_args = training_args
         
         # Initialize device management
-        self.device_manager = DeviceManager()
+        self.device_manager = PerformanceDeviceManager()
         self.device = self.device_manager.device
         
         # Initialize core components
