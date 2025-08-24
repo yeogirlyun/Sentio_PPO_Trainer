@@ -32,35 +32,64 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class TradingEnvironment:
-    """Realistic trading environment for PPO training."""
+    """Realistic trading environment for PPO training with reasonable episode lengths."""
     
-    def __init__(self, data: pd.DataFrame, initial_balance: float = 10000.0):
+    def __init__(self, data: pd.DataFrame, initial_balance: float = 10000.0, 
+                 max_episode_steps: int = 1000, random_start: bool = True):
+        """
+        Initialize trading environment.
+        
+        Args:
+            data: Market data
+            initial_balance: Starting balance
+            max_episode_steps: Maximum steps per episode (DEFAULT: 1000 = ~2.5 trading days)
+            random_start: Whether to start episodes at random positions in data
+        """
         self.data = data
         self.initial_balance = initial_balance
+        self.max_episode_steps = max_episode_steps
+        self.random_start = random_start
+        
+        logger.info(f"🏗️ Environment initialized:")
+        logger.info(f"   Data length: {len(data):,} rows")
+        logger.info(f"   Max episode steps: {max_episode_steps:,}")
+        logger.info(f"   Episode length: ~{max_episode_steps/390:.1f} trading days")
+        logger.info(f"   Random start: {random_start}")
+        
         self.reset()
         
     def reset(self):
         """Reset environment to initial state."""
+        # Choose random starting position if enabled
+        if self.random_start and len(self.data) > self.max_episode_steps + 100:
+            max_start = len(self.data) - self.max_episode_steps - 50
+            self.episode_start_idx = np.random.randint(50, max_start)
+        else:
+            self.episode_start_idx = 50  # Leave some lookback room
+        
         self.current_step = 0
         self.balance = self.initial_balance
         self.position = 0.0
         self.total_trades = 0
         self.episode_reward = 0.0
         self.trade_history = []
+        
+        logger.debug(f"🔄 Episode reset - Start idx: {self.episode_start_idx}")
         return self._get_observation()
     
     def _get_observation(self) -> np.ndarray:
         """Get current market observation with 20 features."""
-        if self.current_step >= len(self.data) - 1:
+        data_idx = self.episode_start_idx + self.current_step
+        
+        if data_idx >= len(self.data) - 1:
             return np.zeros(20, dtype=np.float32)
         
-        current_idx = self.current_step
-        lookback = min(20, current_idx)
+        lookback = min(20, data_idx)
         
         # Price features
-        current_price = self.data.iloc[current_idx]['close']
+        current_price = self.data.iloc[data_idx]['close']
         if lookback > 0:
-            recent_prices = self.data.iloc[current_idx-lookback:current_idx]['close'].values
+            recent_prices = self.data.iloc[data_idx-lookback:data_idx]['close'].values
             price_change = (current_price - recent_prices[-1]) / recent_prices[-1] if len(recent_prices) > 0 else 0.0
             volatility = np.std(recent_prices) / np.mean(recent_prices) if len(recent_prices) > 1 else 0.0
         else:
@@ -68,16 +97,16 @@ class TradingEnvironment:
             volatility = 0.0
         
         # Volume features
-        current_volume = self.data.iloc[current_idx]['volume']
+        current_volume = self.data.iloc[data_idx]['volume']
         if lookback > 0:
-            recent_volumes = self.data.iloc[current_idx-lookback:current_idx]['volume'].values
+            recent_volumes = self.data.iloc[data_idx-lookback:data_idx]['volume'].values
             volume_ratio = current_volume / np.mean(recent_volumes) if len(recent_volumes) > 0 else 1.0
         else:
             volume_ratio = 1.0
         
         # Technical indicators
         if lookback >= 10:
-            prices = self.data.iloc[current_idx-lookback:current_idx]['close'].values
+            prices = self.data.iloc[data_idx-lookback:data_idx]['close'].values
             sma_short = np.mean(prices[-5:]) if len(prices) >= 5 else current_price
             sma_long = np.mean(prices[-10:]) if len(prices) >= 10 else current_price
             rsi = self._calculate_rsi(prices) if len(prices) >= 14 else 50.0
@@ -150,10 +179,14 @@ class TradingEnvironment:
     
     def step(self, action: int) -> Tuple[np.ndarray, float, bool, bool, Dict]:
         """Execute trading action: 0=hold, 1=buy, 2=sell."""
-        if self.current_step >= len(self.data) - 1:
-            return self._get_observation(), 0.0, True, False, {}
+        data_idx = self.episode_start_idx + self.current_step
         
-        current_price = self.data.iloc[self.current_step]['close']
+        # Check if episode should end
+        if (self.current_step >= self.max_episode_steps or 
+            data_idx >= len(self.data) - 1):
+            return self._get_observation(), 0.0, True, False, {'reason': 'max_steps'}
+        
+        current_price = self.data.iloc[data_idx]['close']
         reward = 0.0
         transaction_cost = 0.001  # 0.1% transaction cost
         
@@ -206,14 +239,27 @@ class TradingEnvironment:
             if len(self.trade_history) > 0 and self.trade_history[-1]['profit'] > 0:
                 reward += 0.1
         
-        done = self.current_step >= len(self.data) - 1
+        # Calculate portfolio value and reward
+        portfolio_value = self.balance + (self.position * current_price)
+        if hasattr(self, 'last_portfolio_value'):
+            reward = (portfolio_value - self.last_portfolio_value) / self.initial_balance
+        else:
+            reward = 0.0
+        
+        self.last_portfolio_value = portfolio_value
         self.episode_reward += reward
         
+        # Move to next step
+        self.current_step += 1
+        
+        # Check if done
+        done = (self.current_step >= self.max_episode_steps or 
+                data_idx + 1 >= len(self.data) - 1)
+        
         return self._get_observation(), reward, done, False, {
-            'portfolio_value': self.balance + self.position * current_price,
-            'position': self.position,
-            'balance': self.balance,
-            'total_trades': self.total_trades
+            'portfolio_value': portfolio_value,
+            'total_trades': self.total_trades,
+            'episode_reward': self.episode_reward
         }
 
 class PPONetwork(nn.Module):
@@ -282,17 +328,20 @@ class PPOTrainer:
                  ppo_type: str = 'enhanced-maskable',
                  data_path: str = 'data/polygon_QQQ_1m.feather',
                  output_name: Optional[str] = None,
-                 learning_rate: float = 3e-4):
+                 learning_rate: float = 3e-4,
+                 episode_length: int = 1000):
         
         self.ppo_type = ppo_type
+        self.episode_length = episode_length
         self.device = torch.device('cpu')  # CPU for compatibility
         
         # Load data
         self.data = self._load_data(data_path)
         logger.info(f"Loaded {len(self.data)} rows of market data")
+        logger.info(f"Episode length: {episode_length} steps (~{episode_length/390:.1f} trading days)")
         
         # Create environment
-        self.env = TradingEnvironment(self.data)
+        self.env = TradingEnvironment(self.data, max_episode_steps=episode_length, random_start=True)
         
         # Create network
         self.network = PPONetwork(ppo_type=ppo_type)
@@ -449,12 +498,17 @@ class PPOTrainer:
     def train(self, 
               max_episodes: Optional[int] = None, 
               max_minutes: Optional[int] = None,
-              target_reward: float = 0.5) -> Dict:
+              target_reward: float = 0.00001) -> Dict:
         """Train the PPO model."""
         
         logger.info(f"Starting {self.ppo_type} PPO training")
         logger.info(f"Limits: {max_episodes or 'unlimited'} episodes, {max_minutes or 'unlimited'} minutes")
-        logger.info(f"Target reward: {target_reward}")
+        logger.info(f"Target reward: {target_reward:.6f} per step")
+        
+        # Calculate and display monthly return equivalent
+        daily_return = target_reward * 390  # 390 steps per day
+        monthly_return = (1 + daily_return) ** 21 - 1  # 21 trading days per month
+        logger.info(f"🎯 Target: {monthly_return:.1%} monthly returns ({daily_return:.3%} daily)")
         
         self.training_start_time = time.time()
         iteration = 0
@@ -480,8 +534,9 @@ class PPOTrainer:
                     avg_reward = np.mean(recent_rewards)
                     reward_std = np.std(recent_rewards)
                     
-                    if avg_reward >= target_reward and reward_std < 0.1:
-                        logger.info(f"Model converged! Avg reward: {avg_reward:.4f}, Std: {reward_std:.4f}")
+                    if avg_reward >= target_reward and reward_std < 0.00001:
+                        logger.info(f"Model converged! Avg reward: {avg_reward:.6f}, Std: {reward_std:.6f}")
+                        logger.info(f"🎯 TARGET ACHIEVED: ~10% monthly returns!")
                         break
                 
                 # Collect experience
@@ -583,6 +638,8 @@ Examples:
     parser.add_argument('--data', type=str, default='data/polygon_QQQ_1m.feather', 
                        help='Input data file path (default: data/polygon_QQQ_1m.feather)')
     parser.add_argument('--learning-rate', type=float, default=3e-4, help='Learning rate (default: 3e-4)')
+    parser.add_argument('--episode-length', type=int, default=1000, 
+                       help='Steps per episode (default: 1000 = ~2.5 trading days)')
     
     args = parser.parse_args()
     
@@ -591,7 +648,8 @@ Examples:
         ppo_type=args.type,
         data_path=args.data,
         output_name=args.output,
-        learning_rate=args.learning_rate
+        learning_rate=args.learning_rate,
+        episode_length=args.episode_length
     )
     
     # Train model

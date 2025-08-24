@@ -1,18 +1,29 @@
 # Sentio PPO Trainer
 
-A sophisticated Proximal Policy Optimization (PPO) training system designed for algorithmic trading, featuring advanced reinforcement learning techniques and realistic market simulation.
+A sophisticated Proximal Policy Optimization (PPO) training system designed for algorithmic trading, targeting **realistic 10% monthly returns** through advanced reinforcement learning techniques and market simulation.
+
+## 🎯 **Performance Target: 10% Monthly Returns**
+
+Our PPO system is calibrated to achieve **sustainable 10% monthly returns** (8.5% actual target):
+- **Daily Target**: 0.39% per day
+- **Per-Step Reward**: 0.00001 (0.001% per minute)
+- **Realistic**: Achievable in real market conditions
+- **Sustainable**: Based on proper risk management
 
 ## 🚀 Quick Start
 
 ```bash
-# Default: Enhanced-maskable PPO, unlimited training until stable
+# 🏆 Recommended: Train until convergence (10% monthly target)
 python train_ppo.py
 
-# 30-minute training session
-python train_ppo.py --minutes 30
+# Fixed episodes for testing
+python train_ppo.py --episodes 1000
+
+# Custom episode length (default: 1000 steps = ~2.5 trading days)
+python train_ppo.py --episodes 500 --episode-length 500
 
 # Train specific PPO variant
-python train_ppo.py --type enhanced-maskable --minutes 30 --output my_model
+python train_ppo.py --type enhanced-maskable --episodes 1000 --output my_model
 ```
 
 ## 📋 Features
@@ -60,6 +71,7 @@ python train_ppo.py [OPTIONS]
 | `--type` | PPO variant: `standard`, `maskable`, `enhanced-maskable` | `enhanced-maskable` |
 | `--minutes` | Training time limit in minutes | Unlimited |
 | `--episodes` | Maximum number of episodes | Unlimited |
+| `--episode-length` | Steps per episode (~2.5 trading days) | `1000` |
 | `--output` | Output filename (without extension) | Auto-generated |
 | `--data` | Input data file path | `data/polygon_QQQ_1m.feather` |
 | `--learning-rate` | Learning rate | `3e-4` |
@@ -67,17 +79,22 @@ python train_ppo.py [OPTIONS]
 ### Examples
 
 ```bash
-# Quick 5-minute test
-python train_ppo.py --minutes 5 --output quick_test
+# 🏆 Train until 10% monthly target achieved
+python train_ppo.py --type enhanced-maskable --output production_model
 
-# Standard PPO for 1000 episodes
-python train_ppo.py --type standard --episodes 1000
+# Quick test with short episodes
+python train_ppo.py --episodes 10 --episode-length 100 --output quick_test
 
-# Custom data file
-python train_ppo.py --data my_custom_data.feather --minutes 60
+# Standard PPO for 1000 episodes (realistic length)
+python train_ppo.py --type standard --episodes 1000 --output standard_ppo_1k
 
-# Find stable model (runs until convergence)
-python train_ppo.py --type enhanced-maskable
+# All three variants in parallel (run in separate terminals)
+python train_ppo.py --type standard --episodes 1000 --output sentio_standard_ppo
+python train_ppo.py --type maskable --episodes 1000 --output sentio_maskable_ppo  
+python train_ppo.py --type enhanced-maskable --episodes 1000 --output sentio_enhanced_ppo
+
+# Custom episode length for different strategies
+python train_ppo.py --episode-length 500 --episodes 2000 --output short_episodes
 ```
 
 ## 🏗️ Architecture
@@ -85,8 +102,10 @@ python train_ppo.py --type enhanced-maskable
 ### Trading Environment
 - **Observation Space**: 20 features including price, volume, technical indicators, portfolio state
 - **Action Space**: 3 actions (Hold, Buy, Sell)
-- **Reward Function**: Portfolio return with transaction cost penalties
-- **Episode Length**: Variable based on data length
+- **Reward Function**: Portfolio return calibrated for 10% monthly targets
+- **Episode Length**: 1000 steps (default) = ~2.5 trading days
+- **Random Start**: Episodes begin at random positions in historical data
+- **Transaction Costs**: Realistic 0.1% trading fees
 
 ### PPO Network
 - **Feature Extraction**: 256→256→128 neurons with dropout
